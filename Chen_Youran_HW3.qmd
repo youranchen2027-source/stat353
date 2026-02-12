@@ -1,0 +1,297 @@
+---
+title: "HW 3 Nonlinear & Nonparametric Regression: Data Analysis Problems"
+subtitle: "Advanced Regression (STAT 353-0)"
+author: "Youran Chen"
+pagetitle: "HW 3 Youran Chen"
+date: today
+
+format:
+  html:
+    toc: true
+    toc-depth: 4
+    toc-location: left
+    embed-resources: true
+    code-fold: false
+    link-external-newwindow: true
+    theme: cosmo
+
+execute:
+  warning: false
+
+from: markdown+emoji
+reference-location: margin
+citation-location: margin  
+---
+
+::: {.callout-tip icon=false}
+
+## Github Repo Link
+
+To link to your github **repo**sitory, appropriately edit the example link below. Meaning replace `https://your-github-repo-url` with your github repo url. Suggest verifying the link works before submitting.
+
+[https://github.com/youranchen2027-source/stat353](https://github.com/youranchen2027-source/stat353)
+
+:::
+
+::: {.callout-important}
+
+All students are required to complete this problem set!
+
+:::
+
+## Load packages & data
+
+
+```{r}
+#| label: load-pkgs-data
+
+# load package(s)
+library(scatterplot3d)
+library(mgcv)
+library(np)
+
+# load data
+ginzberg <- read.table("Ginzberg.txt", header = TRUE)
+states <- read.table("States.txt", header = TRUE)
+chile <- read.table("Chile.txt", header = TRUE)
+duncan <- read.table("Duncan-1.txt", header = TRUE)
+```
+
+
+## Data analysis problems
+
+### 1. Exercise D17.1 
+
+The data in `Ginzberg.txt` (collected by Ginzberg) were analyzed by Monette (1990). The data are for a group of 82 psychiatric patients hospitalized for depression. The response variable in the data set is the patient's score on the Beck scale, a widely used measure of depression. The explanatory variables are "simplicity" (measuring the degree to which the patient "sees the world in black and white") and "fatalism". (These three variables have been adjusted for other explanatory variables that can influence depression.) Use the adjusted scores for the analysis.
+
+Using the full quadratic regression model
+
+$$Y = \beta_0 + \beta_1 X_1 + \beta_2 X_2 + \beta_3 X_1^2 + \beta_4 X_2^2 + \beta_5 X_1 X_2 + \epsilon$$
+
+regress the Beck-scale scores on simplicity and fatalism.
+
+(a) Are the quadratic and product terms needed here?
+
+::: {.callout-tip icon="false"}
+## Solution
+
+The ANOVA p-value is 0.1147, which is larger than 0.05. Therefore, the quadratic and product terms are not needed,not significantly improving the fit.
+
+```{r}
+full_model <- lm(adjdepression ~ adjsimplicity + adjfatalism + I(adjsimplicity^2) + I(adjfatalism^2) + adjsimplicity:adjfatalism,
+               data = ginzberg)
+linear_model <- lm(adjdepression ~ adjsimplicity + adjfatalism, data = ginzberg)
+anova(linear_model, full_model)
+```
+
+:::
+
+(b) Graph the data and the fitted regression surface in three dimensions. Do you see any problems with the data?
+
+::: {.callout-tip icon="false"}
+## Solution
+
+A few observations lie away from the main group of data points and may influence the fit.
+
+```{r}
+d <- na.omit(ginzberg[, c("adjsimplicity", "adjfatalism", "adjdepression")])
+s3d <- scatterplot3d(d$adjsimplicity,
+                     d$adjfatalism,
+                     d$adjdepression,
+                     pch = 16,
+                     color = "black",
+                     xlab = "Adjusted Simplicity",
+                     ylab = "Adjusted Fatalism",
+                     zlab = "Adjusted Depression")
+```
+
+:::
+
+(c) What do standard regression diagnostics for influential observations show?
+
+::: {.callout-tip icon="false"}
+## Solution
+
+Most Standardized Pearson residuals lie within ±2, indicating an adequate fit.
+Three observations have larger standardized Pearson residuals and could be considered potential outliers, but no severe violations of model assumptions are evident.
+
+```{r}
+pearson.res <- resid(full_model, type = "pearson")
+std.pearson.res <- pearson.res / sd(pearson.res)
+plot(std.pearson.res,
+     ylab = "Standardized Pearson residuals",
+     xlab = "Observation index",
+     main = "Standardized Pearson Residuals")
+
+abline(h = c(-2, 2), lty = 2, col = "red")
+```
+
+:::
+
+### 2. Exercise D18.2 
+
+For this analysis, use the `States.txt` data, which includes average SAT scores for each state as the outcome.
+
+(a) Put together a model with SAT math (`satMath`) as the outcome and `region`, `population`, `percentTaking`,  and `teacherPay` as the explanatory variables, each included as linear terms. Interpret the findings.
+
+::: {.callout-tip icon="false"}
+## Solution
+
+In term of the overall model, The multiple $R^2$ is 0.884 and the adjusted $R^2$ is 0.851, indicating a strong overall fit. The p-value for the F-test is 7.914e-15, indicating at least one of the predictors is associated with SAT math scores.
+
+Region effects are generally not statistically significant. The only exception is the South Atlantic (SA) region, which shows a statistically significant negative effect relative to the baseline region (estimate = −25.4, $p=0.017$).
+This suggests that states in the South Atlantic region tend to have lower SAT math scores than the reference region
+
+Population has an estimated coefficient close to zero and is not statistically significant ($p=0.83$). The state population size does not have a meaningful linear association with SAT math scores.
+
+Percent taking the SAT is the most important predictor in the model. Its estimated coefficient is about −1.09, which is highly statistically significant ($p<10^{−6}$). Holding other variables fixed, a unit increase in the proportion of students taking the SAT is associated with an average decrease of about 1.1 units in the SAT math score.
+
+Teacher pay has a positive estimated coefficient (0.37), but it is not statistically significant ($p=0.48$).
+
+```{r}
+lm_fit <- lm(satMath ~ region + population + percentTaking + teacherPay, data = states)
+summary(lm_fit)
+```
+
+:::
+
+(b) Now, instead approach building this model using the nonparametric-regression methods discussed in Chapter 18 of our main course textbook, FOX. Fit a general nonparametric regression model *and* an additive-regression model, comparing the results to each other and to the linear least-squares fit to the data (in part (a))). If you have problems with categorical variables for the nonparametric models, feel free to remove them. Be sure to explain the models.
+
+::: {.callout-tip icon="false"}
+## Solution
+
+In term of these two model, Percent taking the SAT remains the dominant predictor. Its effect is highly nonlinear. Teacher pay shows some nonlinear influence. Higher pay tends to correspond to slightly higher SAT scores, but the effect is not strictly linear. Population has very little effect.
+
+All three models agree that percentTaking is the main driver of SAT math scores. Population is consistently unimportant.
+
+```{r}
+X <- states[, c("population", "percentTaking", "teacherPay")]
+y <- states$satMath
+
+# general nonparametric regression
+bw <- npregbw(xdat = X, ydat = y, regtype = "lc")
+np_fit <- npreg(bws = bw)
+summary(np_fit)
+
+# Additive regression
+gam_fit <- gam(satMath ~ s(population) + s(percentTaking) + s(teacherPay), data = states)
+summary(gam_fit)
+```
+
+:::
+
+(c) Can you handle the nonlinearity by a transformation or by another parametric regression model, such as a polynomial regression? Investigate and explain. What are the tradeoffs between these nonparametric and parametric approaches?
+
+::: {.callout-tip icon="false"}
+## Solution
+
+Yes. 
+For a polynomial regression and a parametric regression model using variable transformations, the models explains about 83% of the variation in SAT math scores, which is slightly lower than the general nonparametric regression but comparable to the linear and additive models.
+The square root transformation of percentTaking in the parametric transformation model effectively captures the nonlinear decrease in SAT scores as participation rises, keeping coefficients interpretable.
+The parametric approach is interpretable, may miss nonlinear patterns. The nonparametric apporoach is the most flexible, highest fit but has low interpretability.
+
+```{r}
+lm_poly <- lm(satMath ~ percentTaking + I(percentTaking^2) + population + teacherPay, data = states)
+summary(lm_poly)
+
+lm_trans <- lm(satMath ~ sqrt(percentTaking) + log(population) + teacherPay, data = states)
+summary(lm_trans)
+
+plot(states$percentTaking, states$satMath, pch=16, col='blue',
+     xlab = "Percent Taking SAT", ylab = "SAT Math", main = "SAT Math vs Percent Taking")
+lines(sort(states$percentTaking), 
+      predict(lm_poly, newdata = data.frame(percentTaking = sort(states$percentTaking),
+                                           population = mean(states$population),
+                                           teacherPay = mean(states$teacherPay))),
+      col='red', lwd=2)
+
+```
+
+:::
+
+### 3. Exercise D18.3
+
+Return to the `Chile.txt` dataset used in HW 2. Reanalyze the data employing generalized nonparametric regression (including generalized additive) models. As in HW2, you can remove abstained and undecided votes, and focus only on Yes and No votes.
+
+(a) What, if anything, do you learn about the data from the nonparametric regression?
+
+::: {.callout-tip icon="false"}
+## Solution
+
+Statusquo (p<2e-16) has a significant nonlinear effect on Yes-vote probability, while age (p=0.881) and income (p=0.350) are roughly linear and not statistically significant.
+Sex (p=0.005) and education (p<0.01) significantly affect voting behavior, with higher education and male respondents being less likely to vote Yes. Region (p>0.2) does not significantly affect the probability of a Yes vote.
+
+```{r}
+chile <- na.omit(chile)
+chile <- subset(chile, vote %in% c("Y", "N"))
+chile$vote_bin <- ifelse(chile$vote == "Y", 1, 0)
+chile$sex <- factor(chile$sex)
+chile$education <- factor(chile$education, levels = c("P", "S", "PS"))
+chile$region <- factor(chile$region)
+
+gam_model <- gam(vote_bin ~ s(age, k=5) + s(income, k=5) + s(statusquo, k=5) + sex + education + region,
+                 family = binomial, data = chile)
+summary(gam_model)
+```
+
+:::
+
+(b) If the results appear to be substantially nonlinear, can you deal with the nonlinearity in a suitably respecified generalized linear model (e.g., by transforming one or more explanatory variables)? If they do not appear nonlinear, still try a transformation to see if anything changes.
+
+::: {.callout-tip icon="false"}
+## Solution
+
+Statusquo (p<2e-16) has a significant nonlinear effect on Yes-vote probability, so I try to use the quadratic term for statusquo. However, the quadratic term of statusquo is not significant (p=0.2), indicating that the nonlinearity suggested by GAM is mild and can be adequately captured by a linear term for statusquo in the GLM.
+
+```{r}
+glm_model <- glm(vote_bin ~ statusquo + I(statusquo^2) + age + income + sex + education + region,
+                 family = binomial, data = chile)
+summary(glm_model)
+```
+
+:::
+
+### 4. Exercise E18.7
+
+For this analysis, use the `Duncan.txt` data. Here we are interested in the outcome `prestige` and the explanatory variable `income`.
+
+(a) Fit the local-linear regression of prestige on income with span $s = 0.6$ (see Figure 18.7 in the book). This has 5.006 equivalent degrees of freedom, very close to the number of degrees of freedom for a fourth order polynomial.
+
+::: {.callout-tip icon="false"}
+## Solution
+
+The local-linear regression effectively captured some fluctuations and was relatively smooth.
+
+```{r}
+loess_fit <- loess(prestige ~ income, data = duncan, span = 0.6)
+
+income_grid <- seq(min(duncan$income), max(duncan$income), length.out = 200)
+prestige_loess <- predict(loess_fit, newdata = data.frame(income = income_grid))
+
+plot(duncan$income, duncan$prestige, pch=16, col="gray", xlab="Income", ylab="Prestige",
+     main="Local-linear regression of Prestige on Income")
+lines(income_grid, prestige_loess, col="red", lwd=2)
+```
+
+:::
+
+(b) Fit a fourth order polynomial of the data and compare the resulting regression curve with the local-linear regression.
+
+::: {.callout-tip icon="false"}
+## Solution
+
+The curve of a fourth-order polynomial is very close to that of The local-linear regression. However, local-linear regression tends to favor individual data at locations with less data, while a fourth-order polynomial is more gradual.
+
+```{r}
+poly_fit <- lm(prestige ~ poly(income, 4, raw=TRUE), data = duncan)
+prestige_poly <- predict(poly_fit, newdata = data.frame(income = income_grid))
+
+plot(duncan$income, duncan$prestige, pch=16, col="gray", xlab="Income", ylab="Prestige",
+     main="Local-linear vs 4th-order polynomial regression")
+lines(income_grid, prestige_loess, col="red", lwd=2, lty=1)
+lines(income_grid, prestige_poly, col="blue", lwd=2, lty=2)
+legend("topleft", legend=c("Local-linear (span=0.6)", "4th-order polynomial"),
+       col=c("red","blue"), lty=c(1,2), lwd=2)
+```
+
+:::

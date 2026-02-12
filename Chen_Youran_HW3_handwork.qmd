@@ -1,0 +1,143 @@
+---
+title: "HW 3 Nonlinear & Nonparametric Regression: Handwork Exercises"
+subtitle: "Advanced Regression (STAT 353-0)"
+author: "Youran Chen"
+pagetitle: "HW 3 Handwork Youran Chen"
+date: today
+
+format:
+  html:
+    toc: true
+    toc-depth: 4
+    toc-location: left
+    embed-resources: true
+    code-fold: false
+    link-external-newwindow: true
+    theme: cosmo
+
+execute:
+  warning: false
+
+from: markdown+emoji
+reference-location: margin
+citation-location: margin 
+---
+
+::: {.callout-tip icon=false}
+
+## Github Repo Link
+
+[https://github.com/youranchen2027-source/stat353](https://github.com/youranchen2027-source/stat353)
+
+:::
+
+::: {.callout-important}
+
+**Required** for PhD and MS students in the Department of Statistics and Data Science. 
+
+These exercises are encouraged (but not required) for MS in Applied Statistics and all other students. These students will not be penalized for attempting these question. Nor will they receive extra credit. 
+
+:::
+
+## Handwork
+
+Exercises are from the course textbook *Applied Regression Analysis & Generalized Linear Models, 3rd Edition (FOX)* --- 17.1, 17.2, 18.3, and 18.5. 
+
+You can type your answers directly into this document or you can do the work for each exercise on paper, take a picture of your solution, and include the image within this document (work must be legible). 
+
+Alternatively, you can do the Handwork exercises on paper and submit a scanned copy. This document is expected to be well organized and neat (work must be legible).
+
+### 1. Exercise E17.1
+```{r}
+knitr::include_graphics("Exercise 17.1.jpg")
+```
+
+### 2. Exercise E17.2
+```{r}
+knitr::include_graphics("Exercise 17.2.jpg")
+```
+
+### 3. Exercise E18.3
+```{r}
+library(ggplot2)
+set.seed(123)
+n <- 100
+X <- runif(n, 0, 100)
+X <- sort(X)
+
+true_fun <- function(x) {
+  term <- (x / 10) - 5
+  100 - 5 * term + term^3
+}
+
+epsilon <- rnorm(n, mean = 0, sd = 20)
+Y <- true_fun(X) + epsilon
+df <- data.frame(X = X, Y = Y, Y_true = true_fun(X))
+
+s_val <- 0.4
+
+fit_kernel <- loess(Y ~ X, data = df, span = s_val, degree = 0)
+df$Y_kernel <- predict(fit_kernel)
+fit_loclin <- loess(Y ~ X, data = df, span = s_val, degree = 1)
+df$Y_loclin <- predict(fit_loclin)
+
+ggplot(df, aes(x = X)) +
+  geom_point(aes(y = Y), color = "gray", alpha = 0.6) +
+  geom_line(aes(y = Y_true, color = "True Regression (E[Y|X])"), size = 1.2) +
+  geom_line(aes(y = Y_kernel, color = "Kernel (Local Constant)"), 
+            linetype = "dashed", size = 1) +
+  geom_line(aes(y = Y_loclin, color = "Local Linear"), 
+            linetype = "dotdash", size = 1) +
+  scale_color_manual(values = c(
+    "True Regression (E[Y|X])" = "black",
+    "Kernel (Local Constant)" = "red",
+    "Local Linear" = "blue"
+  )) +
+  labs(title = paste("Comparison of Estimators with Span s =", s_val),
+       subtitle = "Exercise 18.3: Visual selection of smoothing parameter",
+       x = "X", y = "Y", color = "Estimator Type") +
+  theme_minimal() +
+  theme(legend.position = "bottom")
+```
+
+The local-linear estimator has less bias. First, The kernel estimator has a bias that depends on the slope of the true function. The local-linear estimator fits a line ($a + bx$) locally rather than a constant, which mathematically cancels out the bias term associated with the slope. Second, the kernel window is asymmetric at the boundaries. However, the local-linear estimator uses the local slope to "project" the trend to the edge, correcting for the lack of data on one side.
+
+### 4. Exercise E18.5
+```{r}
+library(ggplot2)
+set.seed(123)
+n <- 100
+X <- sort(runif(n, 0, 100))
+true_fun <- function(x) {
+  term <- (x / 10) - 5
+  100 - 5 * term + term^3
+}
+Y_true <- true_fun(X)
+epsilon <- rnorm(n, mean = 0, sd = 20)
+Y <- Y_true + epsilon
+df <- data.frame(X = X, Y = Y, Y_true = Y_true)
+
+calc_ase <- function(s) {
+  fit <- loess(Y ~ X, data = df, span = s, degree = 1)
+  Y_hat <- predict(fit)
+  mean((Y_hat - df$Y_true)^2, na.rm = TRUE)
+}
+
+spans <- seq(0.05, 0.95, by = 0.01)
+ase_values <- sapply(spans, calc_ase)
+results <- data.frame(span = spans, ASE = ase_values)
+
+best_span <- results$span[which.min(results$ASE)]
+
+ggplot(results, aes(x = span, y = ASE)) +
+  geom_line(color = "blue", size = 1) +
+  geom_vline(xintercept = best_span, linetype = "dashed", color = "red") +
+  annotate("text", x = best_span + 0.1, y = max(results$ASE), 
+           label = paste("Best s =", best_span), color = "red") +
+  labs(title = "ASE vs. Span (Local-Linear Regression)",
+       subtitle = "Exercise 18.5: Finding the optimal smoothing parameter",
+       x = "Span (s)", y = "Average Squared Error (ASE)") +
+  theme_minimal()
+```
+
+The span 0.27 produces the smallest ASE, which is close to the choice of the span 0.4 in Exercise 18.3. 
