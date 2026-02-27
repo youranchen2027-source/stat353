@@ -1,0 +1,320 @@
+---
+title: "HW 4 Missing Data & Model Selection: Data Analysis Problems "
+subtitle: "Advanced Regression (STAT 353-0)"
+author: "Youran Chen"
+pagetitle: "HW 4 Youran Chen"
+date: today
+
+format:
+  html:
+    toc: true
+    toc-depth: 4
+    toc-location: left
+    embed-resources: true
+    code-fold: false
+    link-external-newwindow: true
+    theme: cosmo
+
+execute:
+  warning: false
+
+from: markdown+emoji
+reference-location: margin
+citation-location: margin
+---
+
+::: {.callout-tip icon=false}
+
+## Github Repo Link
+
+https://github.com/youranchen2027-source/stat353
+
+:::
+
+::: {.callout-important}
+
+All students are required to complete this problem set!
+
+:::
+
+
+## Data analysis problems
+
+### 1. Exercise D20.1 (MI)
+
+Using the United Nations social-indicators data (in `UnitedNations.txt`), develop a regression model for the response variable female expectation of life. Feel free to use whatever explanatory variables in the data set make sense to you and to employ variable transformations, if needed.
+
+(a) Work initially with complete cases, and once you have an apparently satisfactory model, obtain estimates and standard errors of the regression coefficients.
+
+::: {.callout-tip icon="false"}
+## Solution
+
+```{r}
+library(dplyr)
+library(broom)
+
+un <- read.table("UnitedNations.txt", header = TRUE, na.strings = "NA")
+un$region <- factor(un$region)
+
+cc_dat <- un %>%
+  select(lifeFemale, infantMortality, GDPperCapita, tfr, region) %>%
+  na.omit()
+
+fit_cc <- lm(lifeFemale ~ log(infantMortality) + log(GDPperCapita) + tfr + region, data = cc_dat)
+
+summary(fit_cc)
+
+cc_coef <- tidy(fit_cc)
+print(cc_coef)
+```
+:::
+
+(b) Now redo your analysis in (a) but use multiple imputation.
+
+::: {.callout-tip icon="false"}
+## Solution
+
+```{r}
+library(mice)
+
+mi_dat <- un %>%
+  filter(!is.na(lifeFemale)) %>%
+  select(lifeFemale, region, tfr, contraception, educationMale, educationFemale, lifeMale, infantMortality, GDPperCapita,
+    economicActivityMale, economicActivityFemale, illiteracyMale, illiteracyFemale)
+
+set.seed(42)
+ini  <- mice(mi_dat, maxit = 0, printFlag = FALSE)
+meth <- ini$method
+pred <- ini$predictorMatrix
+
+meth["lifeFemale"] <- ""
+meth["region"] <- ""
+
+num_vars <- names(mi_dat)[sapply(mi_dat, is.numeric)]
+num_vars <- setdiff(num_vars, "lifeFemale")
+meth[num_vars] <- "pmm"
+
+imp <- mice(mi_dat, m = 20, method = meth, seed = 42, printFlag = FALSE)
+
+fit_mi <- with(imp, lm(lifeFemale ~ log(infantMortality) + log(GDPperCapita) + tfr + region))
+
+pool_mi <- pool(fit_mi)
+summary(pool_mi)
+```
+:::
+
+(c) Compare these results to those from the complete-case analysis. What do you conclude?
+
+::: {.callout-tip icon="false"}
+## Solution
+
+```{r}
+library(dplyr)
+
+cc_out <- tidy(fit_cc) %>%
+  select(term, estimate_cc = estimate, se_cc = std.error)
+
+mi_out <- summary(pool_mi) %>%
+  select(term, estimate_mi = estimate, se_mi = std.error)
+
+comparison <- full_join(cc_out, mi_out, by = "term")
+print(comparison)
+```
+The complete-case and multiple imputation results are remarkably similar. The direction, magnitude, and statistical significance of all coefficients remain essentially unchanged. This suggests that missingness in the variables used in the final model does not substantially bias the complete-case estimates.
+:::
+
+
+### 2. Exercise D20.3 (Selection)
+
+Long (1997) reports a regression in which the response variable is the prestige of the academic departments where PhDs in biochemistry find their first jobs. The data are in the file `Long-PhDs.txt`.
+
+Prestige is measured on a scale that runs from 1.00 to 5.00, and is unavailable for departments without graduate programs and for departments with ratings below 1.00. The explanatory variables include a dummy regressor for gender; the prestige of the department in which the individual obtained his or her PhD; the number of citations received by the individualís mentor; a dummy regressor coding whether or not the individual held a fellowship; the number of articles published by the individual; and the number of citations received by the individual.
+
+Estimate the regression of prestige of first job on the other variables in three ways:
+
+(a) code all of the missing values as 1.00 and perform an OLS regression;
+
+::: {.callout-tip icon="false"}
+## Solution
+
+```{r}
+library(dplyr)
+library(tidyr)
+dat <- read.table("Long-PhDs.txt", header=TRUE, sep="\t", na.strings="NA", stringsAsFactors=FALSE)
+dat$gender <- factor(dat$gender, levels = c("male","female"))
+dat$fellowship <- factor(dat$fellowship, levels = c("no","yes"))
+dat$job_obs <- ifelse(is.na(dat$job), 0L, 1L)
+dat$job_ols <- ifelse(is.na(dat$job), 1.00, dat$job)
+
+ols_model <- lm(job_ols ~ gender + phd + mentor + fellowship + articles + citations, data = dat)
+
+summary(ols_model)
+```
+:::
+
+(b) treat the missing values as truncated at 1.00 and employ Heckmanís selection-regression model;
+
+::: {.callout-tip icon="false"}
+## Solution
+
+```{r}
+library(sampleSelection)
+
+heckman_model <- selection(
+  selection = job_obs ~ gender + phd + mentor + fellowship + articles + citations,
+  outcome   = job     ~ gender + phd + mentor + fellowship + articles + citations,
+  data = dat,
+  method = "ml"
+)
+
+summary(heckman_model)
+```
+:::
+
+(c) treat the missing values as censored and fit the Tobit model.
+
+::: {.callout-tip icon="false"}
+## Solution
+
+```{r}
+library(AER)
+
+dat$job_tobit <- ifelse(is.na(dat$job), 1.00, dat$job)
+
+tobit_model <- tobit(job_tobit ~ gender + phd + mentor + fellowship + articles + citations, left = 1.00, data = dat)
+
+summary(tobit_model)
+```
+:::
+
+(d) Compare the estimates and coefficient standard errors obtained by the three approaches. Which of these approaches makes the most substantive sense?
+
+::: {.callout-tip icon="false"}
+## Solution
+
+The estimated coefficients in the OLS regression are generally smaller in magnitude and the standard errors are underestimated. The Heckman selection model corrects for potential selection bias and produces larger coefficients than OLS. The estimated correlation parameter ρ is highly significant, suggesting selection effects. However, the Heckman model assumes a sample selection mechanism, which does not accurately reflect the data structure in this case. The Tobit model treats the missing values as left-censored at 1.00, which corresponds exactly to the way prestige is measured. The Tobit estimates are larger than the OLS estimates and similar to the Heckman outcome equation but are obtained under the correct censoring framework.
+:::
+
+### 3. Exercise (Bootstrap)
+
+We will now consider the `Boston` housing dataset from the `MASS` package.
+
+```{r}
+#| label: load-boston-data
+
+# load Boston data
+data(Boston, package = "MASS")
+```
+
+Run `??Boston` in condole to see codebook.
+
+(a) Provide an estimate of the population mean of `medv`. Call this estimate $\hat{\mu}$.
+
+::: {.callout-tip icon="false"}
+## Solution
+
+```{r}
+mu_hat <- mean(Boston$medv)
+mu_hat
+```
+:::
+
+(b) What is the formula for the standard error of an estimate of the mean? Use this to provide an estimate of the standard error of $\hat{\mu}$ in (a).
+
+::: {.callout-tip icon="false"}
+## Solution
+
+```{r}
+s <- sd(Boston$medv)
+n <- nrow(Boston)
+se_formula <- s / sqrt(n)
+se_formula
+```
+:::
+
+(c) Estimate this standard error using the bootstrap. How does this compare to the answer from (b)?
+
+::: {.callout-tip icon="false"}
+## Solution
+
+```{r}
+set.seed(1)
+
+B <- 1000
+boot_means <- numeric(B)
+
+for (i in 1:B) {
+  sample_data <- sample(Boston$medv, n, replace = TRUE)
+  boot_means[i] <- mean(sample_data)
+}
+
+se_boot <- sd(boot_means)
+se_boot
+```
+The results of (b) and (c) are almost exactly the same.
+:::
+
+(d) Provide an estimate of $\hat{\mu}_{med}$, the  median value of `medv` in the population.
+
+::: {.callout-tip icon="false"}
+## Solution
+
+```{r}
+median_hat <- median(Boston$medv)
+median_hat
+```
+:::
+
+(e) Estimate the standard error of $\hat{\mu}_{med}$. Notice that there is no simple formula to do this, so instead use the bootstrap. Comment on your findings.
+
+::: {.callout-tip icon="false"}
+## Solution
+
+```{r}
+set.seed(1)
+
+boot_medians <- numeric(B)
+
+for (i in 1:B) {
+  sample_data <- sample(Boston$medv, n, replace = TRUE)
+  boot_medians[i] <- median(sample_data)
+}
+
+se_median_boot <- sd(boot_medians)
+se_median_boot
+```
+The standard error of the median is close to that of the mean.
+:::
+
+### 4. Exercise D22.1 (Model Selection)
+
+The data file `BaseballPitchers.txt` contains salary and performance data for major-league baseball pitchers at the start of the 1987 season. The data are analogous to those for baseball hitters used as an example in the chapter. Be sure to explore the data and think about variables to use as predictors before specifying candidate models.
+
+(a) Employing one or more of the methods of model selection described in the text, develop a regression model to predict pitchers' salaries.
+
+::: {.callout-tip icon="false"}
+## Solution
+
+```{r}
+library(MASS)
+
+pitchers <- read.table("BaseballPitchers.txt", header = TRUE)
+
+pitchers <- pitchers[!is.na(pitchers$salary), ]
+pitchers$league86 <- factor(pitchers$league86)
+pitchers$league87 <- factor(pitchers$league87)
+pitchers$logSalary <- log(pitchers$salary)
+
+full_model <- lm(logSalary ~ W86 + L86 + ERA86 + IP86 + SV86 + years + careerW + careerL + careerERA + careerIP + careerSV, data = pitchers)
+step_model <- stepAIC(full_model, direction="both")
+summary(step_model)
+```
+The final model is logSalary ~ IP86 + SV86 + years + careerL + careerERA + careerIP
+:::
+
+(b) How successful is the model in predicting salaries? Does the model make substantive sense?
+
+::: {.callout-tip icon="false"}
+## Solution
+The model is statistically significant (p-value < 2.2e-16) and explains about 51% of the variation in log salaries (Adjusted R² = 0.4965). The model has moderate predictive power but does not fully explain salary variation. Current performance (IP86), experience (years), and career performance (careerERA) are important determinants of salary, which makes substantive sense.
+:::

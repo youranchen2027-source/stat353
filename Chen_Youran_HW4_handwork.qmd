@@ -1,0 +1,96 @@
+---
+title: "HW 4 Missing Data & Model Selection: Handwork Exercises"
+subtitle: "Advanced Regression (STAT 353-0)"
+author: "Youran Chen"
+pagetitle: "HW 4 Handwork Youran Chen"
+date: today
+
+format:
+  html:
+    toc: true
+    toc-depth: 4
+    toc-location: left
+    embed-resources: true
+    code-fold: false
+    link-external-newwindow: true
+    theme: cosmo
+
+execute:
+  warning: false
+
+from: markdown+emoji
+reference-location: margin
+citation-location: margin
+---
+
+::: {.callout-tip icon=false}
+
+## Github Repo Link
+
+https://github.com/youranchen2027-source/stat353
+
+:::
+
+::: {.callout-important}
+
+**Required** for PhD and MS students in the Department of Statistics and Data Science. 
+
+These exercises are encouraged (but not required) for MS in Applied Statistics and all other students. These students will not be penalized for attempting these question. Nor will they receive extra credit. 
+
+:::
+
+## Handwork
+
+Exercises are from the course textbook *Applied Regression Analysis & Generalized Linear Models, 3rd Edition (FOX)* ---  20.5, 20.10, 20.13, 21.4, 22.2
+
+You can type your answers and submit within this file *or* you can do this work on paper and submit a scanned copy (be sure it is legible).
+
+You can type your answers directly into this document or you can do the work for each exercise on paper, take a picture of your solution, and include the image within this document (work must be legible). 
+
+Alternatively, you can do the Handwork exercises on paper and submit a scanned copy. This document is expected to be well organized and neat (work must be legible).
+
+### 1. Exercise E20.5
+```{r}
+knitr::include_graphics("Exercise 20.5.jpg")
+```
+
+### 2. Exercise E20.10
+```{r}
+knitr::include_graphics("Exercise 20.10.jpg")
+```
+
+### 3. Exercise E20.13
+```{r}
+knitr::include_graphics("Exercise 20.13.jpg")
+```
+
+### 4. Exercise E21.4
+
+```{r}
+set.seed(123)
+
+n <- 10
+sigma2 <- 100
+r <- 500
+
+y <- rnorm(n, mean = 0, sd = sqrt(sigma2))
+sigma2_hat <- mean((y - mean(y))^2)
+boot_values <- numeric(r)
+
+for (i in 1:r) {
+  y_star <- sample(y, size = n, replace = TRUE)
+  boot_values[i] <- mean((y_star - mean(y_star))^2)
+}
+
+bias_boot <- mean(boot_values) - sigma2_hat
+
+cat("Bootstrap bias       =", bias_boot, "\n")
+cat("Theoretical bias     =", -sigma2/n, "\n")
+cat("Difference           =", bias_boot - (-sigma2/n), "\n")
+```
+The bootstrap estimate of bias (-10.26184) is reasonably close to the theoretical value (−10). The difference is only -0.261837.
+
+### 5. Exercise E22.2
+```{r}
+knitr::include_graphics("Exercise 22.2.jpg")
+```
